@@ -1,8 +1,12 @@
 const CACHE = 'dosis-v1'
-const ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg']
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './favicon.svg']
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)))
+  event.waitUntil(
+    caches.open(CACHE).then((cache) =>
+      Promise.all(ASSETS.map((asset) => cache.add(asset).catch(() => undefined))),
+    ),
+  )
   self.skipWaiting()
 })
 
@@ -51,8 +55,8 @@ self.addEventListener('message', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Hora de tu pastilla', {
       body: data.body || 'Abrí Dosis para marcarla como tomada',
-      icon: '/icon-192.png',
-      badge: '/favicon.svg',
+      icon: './icon-192.png',
+      badge: './favicon.svg',
       tag: data.tag || 'dosis-reminder',
       renotify: true,
       requireInteraction: true,

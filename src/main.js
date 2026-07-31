@@ -190,7 +190,7 @@ function notify(title, body, tag) {
     })
     return
   }
-  new Notification(title, { body, tag, icon: '/icon-192.png' })
+  new Notification(title, { body, tag, icon: './icon-192.png' })
 }
 
 function checkReminders() {
@@ -224,7 +224,7 @@ function checkReminders() {
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker.register(new URL('sw.js', document.baseURI)).catch(() => {})
   })
 }
 
