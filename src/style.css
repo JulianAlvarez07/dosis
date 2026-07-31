@@ -185,7 +185,15 @@ button {
   backdrop-filter: blur(10px);
   box-shadow: var(--shadow);
   animation: rise 0.55s ease both;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  width: 100%;
+}
+
+.dose:active {
+  transform: scale(0.985);
 }
 
 .dose:nth-child(1) {
@@ -199,7 +207,7 @@ button {
 }
 
 .dose.is-taken {
-  opacity: 0.62;
+  opacity: 0.78;
 }
 
 .dose.is-due {
@@ -237,37 +245,31 @@ button {
   font-size: 0.9rem;
 }
 
-.take-btn,
-.undo-btn {
-  min-width: 2.7rem;
-  min-height: 2.7rem;
+.dose-check {
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 999px;
+  border: 2px solid rgba(10, 107, 107, 0.28);
   display: grid;
   place-items: center;
-  transition: transform 0.15s ease, background 0.2s ease;
-}
-
-.take-btn {
-  background: var(--brand);
-  color: white;
-  font-size: 1.15rem;
-  font-weight: 700;
-}
-
-.take-btn:active,
-.undo-btn:active,
-.primary:active,
-.ghost:active {
-  transform: scale(0.96);
-}
-
-.undo-btn {
-  background: var(--ok);
   color: #fff;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
-  width: 2.7rem;
-  padding: 0;
+  background: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dose.is-taken .dose-check {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.primary:active,
+.ghost:active,
+.week-toggle:active,
+.day-chip:active,
+.add-time-btn:active {
+  transform: scale(0.96);
 }
 
 .med-days {

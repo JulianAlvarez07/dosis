@@ -33,6 +33,7 @@ const state = {
   draftMinute: '',
   sheet: null,
   toastTimer: null,
+  mounted: false,
 }
 
 const app = document.querySelector('#app')
@@ -110,15 +111,6 @@ function isTaken(medId, time) {
   return Boolean(day[doseKey(medId, time)])
 }
 
-function markTaken(medId, time, taken = true) {
-  const day = todayKey()
-  state.log[day] = state.log[day] || {}
-  if (taken) state.log[day][doseKey(medId, time)] = Date.now()
-  else delete state.log[day][doseKey(medId, time)]
-  saveLog()
-  render()
-}
-
 function medDays(med) {
   if (Array.isArray(med.days) && med.days.length) return med.days
   return ALL_DAYS
@@ -163,33 +155,6 @@ function isDueNow(time, now = new Date()) {
   return current >= target && current <= target + 30
 }
 
-function showToast(message) {
-  const el = document.querySelector('.toast')
-  if (!el) return
-  el.textContent = message
-  el.classList.add('show')
-  clearTimeout(state.toastTimer)
-  state.toastTimer = setTimeout(() => el.classList.remove('show'), 2200)
-}
-
-function openSheet(name) {
-  state.sheet = name
-  render()
-}
-
-function resetDraft() {
-  state.draftTimes = []
-  state.draftDays = []
-  state.draftName = ''
-  state.draftDose = ''
-  state.draftHour = ''
-  state.draftMinute = ''
-}
-
-function formatHourLabel(hour) {
-  return String(hour)
-}
-
 function pad2(value) {
   return String(value).padStart(2, '0')
 }
@@ -203,23 +168,206 @@ function buildTimeValue(hour, minute) {
   return `${pad2(h)}:${pad2(m)}`
 }
 
-function hourOptions() {
-  return Array.from({ length: 24 }, (_, hour) => {
-    const selected = String(state.draftHour) === String(hour) ? 'selected' : ''
-    return `<option value="${hour}" ${selected}>${formatHourLabel(hour)}</option>`
-  }).join('')
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
 }
 
-function minuteOptions() {
-  return Array.from({ length: 60 }, (_, minute) => {
-    const selected = String(state.draftMinute) === String(minute) ? 'selected' : ''
-    return `<option value="${minute}" ${selected}>${pad2(minute)}</option>`
-  }).join('')
+function showToast(message) {
+  const el = app.querySelector('.toast')
+  if (!el) return
+  el.textContent = message
+  el.classList.add('show')
+  clearTimeout(state.toastTimer)
+  state.toastTimer = setTimeout(() => el.classList.remove('show'), 2200)
+}
+
+function resetDraft() {
+  state.draftTimes = []
+  state.draftDays = []
+  state.draftName = ''
+  state.draftDose = ''
+  state.draftHour = ''
+  state.draftMinute = ''
+}
+
+function toggleTaken(medId, time) {
+  const day = todayKey()
+  const key = doseKey(medId, time)
+  state.log[day] = state.log[day] || {}
+  if (state.log[day][key]) delete state.log[day][key]
+  else state.log[day][key] = Date.now()
+  saveLog()
+  patchDoseCard(medId, time)
+}
+
+function hourOptionsHtml() {
+  return Array.from({ length: 24 }, (_, hour) => `<option value="${hour}">${hour}</option>`).join('')
+}
+
+function minuteOptionsHtml() {
+  return Array.from({ length: 60 }, (_, minute) => `<option value="${minute}">${pad2(minute)}</option>`).join('')
+}
+
+function doseCardHtml(dose) {
+  const due = !dose.taken && isDueNow(dose.time)
+  return `
+    <article
+      class="dose ${dose.taken ? 'is-taken' : ''} ${due ? 'is-due' : ''}"
+      data-action="toggle-dose"
+      data-med="${dose.medId}"
+      data-time="${dose.time}"
+      role="button"
+      tabindex="0"
+      aria-pressed="${dose.taken}"
+    >
+      <div class="dose-time">
+        <strong>${escapeHtml(dose.time)}</strong>
+        <span>${periodLabel(dose.time)}</span>
+      </div>
+      <div class="dose-meta">
+        <h3>${escapeHtml(dose.name)}</h3>
+        <p>${dose.dose ? escapeHtml(dose.dose) : 'Sin dosis indicada'}${due ? ' · ahora' : ''}${dose.taken ? ' · tomada' : ''}</p>
+      </div>
+      <span class="dose-check" aria-hidden="true">${dose.taken ? '✓' : ''}</span>
+    </article>
+  `
+}
+
+function doseListHtml() {
+  const doses = todaysDoses()
+  if (!doses.length) {
+    return `
+      <div class="empty">
+        <strong>Todavía no hay pastillas</strong>
+        Agregá tu primera dosis y te avisamos cuando toque tomarla.
+      </div>
+    `
+  }
+  return `<div class="dose-list">${doses.map(doseCardHtml).join('')}</div>`
+}
+
+function medsListHtml() {
+  if (!state.meds.length) {
+    return `<div class="empty"><strong>Sin medicamentos</strong>Creá uno para empezar.</div>`
+  }
+  return `
+    <div class="meds">
+      ${state.meds
+        .map(
+          (med) => `
+            <article class="med">
+              <div>
+                <h3>${escapeHtml(med.name)}</h3>
+                <p>${med.dose ? escapeHtml(med.dose) + ' · ' : ''}${med.times.join(' · ')}</p>
+                <p class="med-days">${escapeHtml(daysLabel(medDays(med)))}</p>
+              </div>
+              <button class="delete-btn" type="button" data-action="delete-med" data-med="${med.id}">Borrar</button>
+            </article>
+          `,
+        )
+        .join('')}
+    </div>
+  `
+}
+
+function timesListHtml() {
+  if (!state.draftTimes.length) {
+    return `<p class="times-empty">Todavía no agregaste un horario.</p>`
+  }
+  return `
+    <div class="times-row">
+      ${state.draftTimes
+        .map(
+          (time, index) => `
+            <span class="time-pill">
+              <strong>${escapeHtml(time)}</strong>
+              <span>${periodLabel(time)}</span>
+              <button type="button" data-action="remove-time" data-index="${index}" aria-label="Quitar horario">×</button>
+            </span>
+          `,
+        )
+        .join('')}
+    </div>
+  `
+}
+
+function updateHome() {
+  const pending = todaysDoses().filter((d) => !d.taken).length
+  const chip = app.querySelector('[data-ref="date-chip"]')
+  const list = app.querySelector('[data-ref="dose-list"]')
+  if (chip) chip.textContent = `${formatDateLabel()}${pending ? ` · ${pending} pendientes` : ' · al día'}`
+  if (list) list.innerHTML = doseListHtml()
+}
+
+function updateDaysUI() {
+  const wholeWeek = isWholeWeek(state.draftDays)
+  const weekBtn = app.querySelector('[data-action="toggle-whole-week"]')
+  if (weekBtn) {
+    weekBtn.classList.toggle('is-on', wholeWeek)
+    weekBtn.setAttribute('aria-pressed', String(wholeWeek))
+  }
+  app.querySelectorAll('[data-action="toggle-day"]').forEach((btn) => {
+    const day = Number(btn.dataset.day)
+    const on = state.draftDays.includes(day)
+    btn.classList.toggle('is-on', on)
+    btn.setAttribute('aria-pressed', String(on))
+  })
+}
+
+function updateTimesUI() {
+  const box = app.querySelector('[data-ref="times-box"]')
+  if (box) box.innerHTML = timesListHtml()
+}
+
+function updateManageList() {
+  const box = app.querySelector('[data-ref="meds-box"]')
+  if (box) box.innerHTML = medsListHtml()
+}
+
+function syncDraftInputs() {
+  const nameInput = app.querySelector('#med-name')
+  const doseInput = app.querySelector('#med-dose')
+  const hourSelect = app.querySelector('#draft-hour')
+  const minuteSelect = app.querySelector('#draft-minute')
+  if (nameInput) nameInput.value = state.draftName
+  if (doseInput) doseInput.value = state.draftDose
+  if (hourSelect) hourSelect.value = state.draftHour === '' ? '' : String(state.draftHour)
+  if (minuteSelect) minuteSelect.value = state.draftMinute === '' ? '' : String(state.draftMinute)
+}
+
+function setSheet(name) {
+  state.sheet = name
+  const addOpen = name === 'add'
+  const manageOpen = name === 'manage'
+
+  app.querySelector('[data-sheet="add-backdrop"]')?.classList.toggle('open', addOpen)
+  app.querySelector('[data-sheet="add"]')?.classList.toggle('open', addOpen)
+  app.querySelector('[data-sheet="add"]')?.setAttribute('aria-hidden', String(!addOpen))
+
+  app.querySelector('[data-sheet="manage-backdrop"]')?.classList.toggle('open', manageOpen)
+  app.querySelector('[data-sheet="manage"]')?.classList.toggle('open', manageOpen)
+  app.querySelector('[data-sheet="manage"]')?.setAttribute('aria-hidden', String(!manageOpen))
+}
+
+function openAdd() {
+  resetDraft()
+  syncDraftInputs()
+  updateDaysUI()
+  updateTimesUI()
+  setSheet('add')
+}
+
+function openManage() {
+  updateManageList()
+  setSheet('manage')
 }
 
 function closeSheet() {
-  state.sheet = null
-  render()
+  setSheet(null)
 }
 
 async function enableNotifications() {
@@ -285,146 +433,53 @@ function registerServiceWorker() {
   })
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-}
+function mount() {
+  const pending = todaysDoses().filter((d) => !d.taken).length
+  app.innerHTML = `
+    <div class="atmosphere" aria-hidden="true"></div>
+    <div class="shell">
+      <header class="hero">
+        <p class="brand">Dosis</p>
+        <p class="tagline">Tu recordatorio diario de pastillas, simple y a mano.</p>
+        <div class="date-chip" data-ref="date-chip">${formatDateLabel()}${pending ? ` · ${pending} pendientes` : ' · al día'}</div>
+        <div class="hero-actions">
+          <button class="ghost" type="button" data-action="open-manage">Mis pastillas</button>
+          <button class="primary" type="button" data-action="open-add">Agregar</button>
+        </div>
+      </header>
 
-function renderDoseList() {
-  const doses = todaysDoses()
-  if (!doses.length) {
-    return `
-      <div class="empty">
-        <strong>Todavía no hay pastillas</strong>
-        Agregá tu primera dosis y te avisamos cuando toque tomarla.
-      </div>
-    `
-  }
-
-  return `
-    <div class="dose-list">
-      ${doses
-        .map((dose) => {
-          const due = !dose.taken && isDueNow(dose.time)
-          return `
-            <article class="dose ${dose.taken ? 'is-taken' : ''} ${due ? 'is-due' : ''}" data-id="${dose.id}">
-              <div class="dose-time">
-                <strong>${escapeHtml(dose.time)}</strong>
-                <span>${periodLabel(dose.time)}</span>
-              </div>
-              <div class="dose-meta">
-                <h3>${escapeHtml(dose.name)}</h3>
-                <p>${dose.dose ? escapeHtml(dose.dose) : 'Sin dosis indicada'}${due ? ' · ahora' : ''}</p>
-              </div>
-              ${
-                dose.taken
-                  ? `<button class="undo-btn" data-action="undo" data-med="${dose.medId}" data-time="${dose.time}" aria-label="Deshacer">✓</button>`
-                  : `<button class="take-btn" data-action="take" data-med="${dose.medId}" data-time="${dose.time}" aria-label="Marcar tomada">✓</button>`
-              }
-            </article>
-          `
-        })
-        .join('')}
+      <h2 class="section-title">Hoy</h2>
+      <div data-ref="dose-list">${doseListHtml()}</div>
     </div>
-  `
-}
 
-function renderMedsList() {
-  if (!state.meds.length) {
-    return `<div class="empty"><strong>Sin medicamentos</strong>Creá uno para empezar.</div>`
-  }
-  return `
-    <div class="meds">
-      ${state.meds
-        .map(
-          (med) => `
-            <article class="med">
-              <div>
-                <h3>${escapeHtml(med.name)}</h3>
-                <p>${med.dose ? escapeHtml(med.dose) + ' · ' : ''}${med.times.join(' · ')}</p>
-                <p class="med-days">${escapeHtml(daysLabel(medDays(med)))}</p>
-              </div>
-              <button class="delete-btn" data-action="delete-med" data-med="${med.id}">Borrar</button>
-            </article>
-          `,
-        )
-        .join('')}
-    </div>
-  `
-}
-
-function renderDaysPicker() {
-  const wholeWeek = isWholeWeek(state.draftDays)
-  return `
-    <div class="field">
-      <label>Días</label>
-      <button
-        type="button"
-        class="week-toggle ${wholeWeek ? 'is-on' : ''}"
-        data-action="toggle-whole-week"
-        aria-pressed="${wholeWeek}"
-      >
-        Toda la semana
-      </button>
-      <div class="days-row" role="group" aria-label="Días de la semana">
-        ${ALL_DAYS.map((day) => {
-          const on = state.draftDays.includes(day)
-          return `
-            <button
-              type="button"
-              class="day-chip ${on ? 'is-on' : ''}"
-              data-action="toggle-day"
-              data-day="${day}"
-              aria-pressed="${on}"
-            >${DAY_SHORT[day]}</button>
-          `
-        }).join('')}
-      </div>
-    </div>
-  `
-}
-
-function renderAddSheet() {
-  const timesMarkup = state.draftTimes.length
-    ? `
-      <div class="times-row" id="times-row">
-        ${state.draftTimes
-          .map(
-            (time, index) => `
-              <span class="time-pill">
-                <strong>${escapeHtml(time)}</strong>
-                <span>${periodLabel(time)}</span>
-                <button type="button" data-action="remove-time" data-index="${index}" aria-label="Quitar horario">×</button>
-              </span>
-            `,
-          )
-          .join('')}
-      </div>
-    `
-    : `<p class="times-empty">Todavía no agregaste un horario.</p>`
-
-  return `
-    <div class="sheet-backdrop ${state.sheet === 'add' ? 'open' : ''}" data-action="close-sheet"></div>
-    <aside class="sheet ${state.sheet === 'add' ? 'open' : ''}" aria-hidden="${state.sheet !== 'add'}">
+    <div class="sheet-backdrop" data-sheet="add-backdrop" data-action="close-sheet"></div>
+    <aside class="sheet" data-sheet="add" aria-hidden="true">
       <div class="sheet-handle"></div>
       <h2>Nueva pastilla</h2>
       <p>Nombre, días y horarios. Se guarda en este celular.</p>
       <form id="add-form">
         <div class="field">
           <label for="med-name">Nombre</label>
-          <input id="med-name" name="name" required maxlength="60" placeholder="Ej. Vitamina D" autocomplete="off" value="${escapeHtml(state.draftName)}" />
+          <input id="med-name" name="name" required maxlength="60" placeholder="Ej. Vitamina D" autocomplete="off" />
         </div>
         <div class="field">
           <label for="med-dose">Dosis (opcional)</label>
-          <input id="med-dose" name="dose" maxlength="40" placeholder="Ej. 1 comprimido" autocomplete="off" value="${escapeHtml(state.draftDose)}" />
+          <input id="med-dose" name="dose" maxlength="40" placeholder="Ej. 1 comprimido" autocomplete="off" />
         </div>
-        ${renderDaysPicker()}
+        <div class="field">
+          <label>Días</label>
+          <button type="button" class="week-toggle" data-action="toggle-whole-week" aria-pressed="false">Toda la semana</button>
+          <div class="days-row" role="group" aria-label="Días de la semana">
+            ${ALL_DAYS.map(
+              (day) => `
+                <button type="button" class="day-chip" data-action="toggle-day" data-day="${day}" aria-pressed="false">${DAY_SHORT[day]}</button>
+              `,
+            ).join('')}
+          </div>
+        </div>
         <div class="field">
           <label>Horarios</label>
-          ${timesMarkup}
+          <div data-ref="times-box">${timesListHtml()}</div>
         </div>
         <div class="field">
           <label>Elegí un horario (0 a 23 h)</label>
@@ -432,16 +487,16 @@ function renderAddSheet() {
             <label class="time-picker-part">
               <span>Hora</span>
               <select id="draft-hour" aria-label="Hora">
-                <option value="" ${state.draftHour === '' ? 'selected' : ''} disabled>Elegir</option>
-                ${hourOptions()}
+                <option value="" selected disabled>Elegir</option>
+                ${hourOptionsHtml()}
               </select>
             </label>
             <span class="time-picker-sep" aria-hidden="true">:</span>
             <label class="time-picker-part">
               <span>Minutos</span>
               <select id="draft-minute" aria-label="Minutos">
-                <option value="" ${state.draftMinute === '' ? 'selected' : ''} disabled>Elegir</option>
-                ${minuteOptions()}
+                <option value="" selected disabled>Elegir</option>
+                ${minuteOptionsHtml()}
               </select>
             </label>
           </div>
@@ -453,103 +508,78 @@ function renderAddSheet() {
         </div>
       </form>
     </aside>
-  `
-}
 
-function renderManageSheet() {
-  return `
-    <div class="sheet-backdrop ${state.sheet === 'manage' ? 'open' : ''}" data-action="close-sheet"></div>
-    <aside class="sheet ${state.sheet === 'manage' ? 'open' : ''}" aria-hidden="${state.sheet !== 'manage'}">
+    <div class="sheet-backdrop" data-sheet="manage-backdrop" data-action="close-sheet"></div>
+    <aside class="sheet" data-sheet="manage" aria-hidden="true">
       <div class="sheet-handle"></div>
       <h2>Tus pastillas</h2>
       <p>Administrá lo que tenés cargado o activá avisos.</p>
-      ${renderMedsList()}
+      <div data-ref="meds-box">${medsListHtml()}</div>
       <div class="sheet-actions">
         <button type="button" class="ghost" data-action="close-sheet">Cerrar</button>
         <button type="button" class="primary" data-action="enable-notifications">Activar avisos</button>
       </div>
     </aside>
-  `
-}
 
-function render() {
-  const pending = todaysDoses().filter((d) => !d.taken).length
-  app.innerHTML = `
-    <div class="atmosphere" aria-hidden="true"></div>
-    <div class="shell">
-      <header class="hero">
-        <p class="brand">Dosis</p>
-        <p class="tagline">Tu recordatorio diario de pastillas, simple y a mano.</p>
-        <div class="date-chip">${formatDateLabel()}${pending ? ` · ${pending} pendientes` : ' · al día'}</div>
-        <div class="hero-actions">
-          <button class="ghost" type="button" data-action="open-manage">Mis pastillas</button>
-          <button class="primary" type="button" data-action="open-add">Agregar</button>
-        </div>
-      </header>
-
-      <h2 class="section-title">Hoy</h2>
-      ${renderDoseList()}
-    </div>
-
-    ${renderAddSheet()}
-    ${renderManageSheet()}
     <div class="toast" role="status" aria-live="polite"></div>
   `
 
-  bindEvents()
+  if (!state.mounted) {
+    bindGlobalEvents()
+    state.mounted = true
+  }
 }
 
-function bindEvents() {
-  app.querySelectorAll('[data-action="open-add"]').forEach((el) =>
-    el.addEventListener('click', () => {
-      resetDraft()
-      openSheet('add')
-    }),
-  )
-  app.querySelectorAll('[data-action="open-manage"]').forEach((el) =>
-    el.addEventListener('click', () => openSheet('manage')),
-  )
-  app.querySelectorAll('[data-action="close-sheet"]').forEach((el) =>
-    el.addEventListener('click', () => closeSheet()),
-  )
-  app.querySelectorAll('[data-action="enable-notifications"]').forEach((el) =>
-    el.addEventListener('click', () => enableNotifications()),
-  )
+function bindGlobalEvents() {
+  app.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-action]')
+    if (!target || !app.contains(target)) return
+    const action = target.dataset.action
 
-  app.querySelectorAll('[data-action="take"]').forEach((el) =>
-    el.addEventListener('click', () => markTaken(el.dataset.med, el.dataset.time, true)),
-  )
-  app.querySelectorAll('[data-action="undo"]').forEach((el) =>
-    el.addEventListener('click', () => markTaken(el.dataset.med, el.dataset.time, false)),
-  )
-  app.querySelectorAll('[data-action="delete-med"]').forEach((el) =>
-    el.addEventListener('click', () => {
-      state.meds = state.meds.filter((m) => m.id !== el.dataset.med)
+    if (action === 'open-add') {
+      openAdd()
+      return
+    }
+    if (action === 'open-manage') {
+      openManage()
+      return
+    }
+    if (action === 'close-sheet') {
+      closeSheet()
+      return
+    }
+    if (action === 'enable-notifications') {
+      enableNotifications()
+      return
+    }
+    if (action === 'toggle-dose') {
+      toggleTaken(target.dataset.med, target.dataset.time)
+      return
+    }
+    if (action === 'delete-med') {
+      state.meds = state.meds.filter((m) => m.id !== target.dataset.med)
       saveMeds()
-      render()
+      updateManageList()
+      updateHome()
       showToast('Pastilla eliminada')
-    }),
-  )
-
-  const nameInput = document.querySelector('#med-name')
-  const doseInput = document.querySelector('#med-dose')
-  const hourSelect = document.querySelector('#draft-hour')
-  const minuteSelect = document.querySelector('#draft-minute')
-  nameInput?.addEventListener('input', () => {
-    state.draftName = nameInput.value
-  })
-  doseInput?.addEventListener('input', () => {
-    state.draftDose = doseInput.value
-  })
-  hourSelect?.addEventListener('change', () => {
-    state.draftHour = hourSelect.value
-  })
-  minuteSelect?.addEventListener('change', () => {
-    state.draftMinute = minuteSelect.value
-  })
-
-  app.querySelectorAll('[data-action="add-time"]').forEach((el) =>
-    el.addEventListener('click', () => {
+      return
+    }
+    if (action === 'toggle-whole-week') {
+      state.draftDays = isWholeWeek(state.draftDays) ? [] : [...ALL_DAYS]
+      updateDaysUI()
+      return
+    }
+    if (action === 'toggle-day') {
+      const day = Number(target.dataset.day)
+      if (state.draftDays.includes(day)) {
+        state.draftDays = state.draftDays.filter((d) => d !== day)
+      } else {
+        state.draftDays = [...state.draftDays, day].sort((a, b) => a - b)
+      }
+      updateDaysUI()
+      return
+    }
+    if (action === 'add-time') {
       const value = buildTimeValue(state.draftHour, state.draftMinute)
       if (!value) {
         showToast('Elegí hora y minutos')
@@ -563,44 +593,40 @@ function bindEvents() {
       state.draftTimes.sort((a, b) => parseTime(a) - parseTime(b))
       state.draftHour = ''
       state.draftMinute = ''
-      openSheet('add')
-      showToast(`Horario ${value} agregado`)
-    }),
-  )
-
-  app.querySelectorAll('[data-action="remove-time"]').forEach((el) =>
-    el.addEventListener('click', () => {
-      const index = Number(el.dataset.index)
+      syncDraftInputs()
+      updateTimesUI()
+      return
+    }
+    if (action === 'remove-time') {
+      const index = Number(target.dataset.index)
       state.draftTimes = state.draftTimes.filter((_, i) => i !== index)
-      openSheet('add')
-    }),
-  )
+      updateTimesUI()
+    }
+  })
 
-  app.querySelectorAll('[data-action="toggle-whole-week"]').forEach((el) =>
-    el.addEventListener('click', () => {
-      state.draftDays = isWholeWeek(state.draftDays) ? [] : [...ALL_DAYS]
-      openSheet('add')
-    }),
-  )
-
-  app.querySelectorAll('[data-action="toggle-day"]').forEach((el) =>
-    el.addEventListener('click', () => {
-      const day = Number(el.dataset.day)
-      if (state.draftDays.includes(day)) {
-        state.draftDays = state.draftDays.filter((d) => d !== day)
-      } else {
-        state.draftDays = [...state.draftDays, day].sort((a, b) => a - b)
-      }
-      openSheet('add')
-    }),
-  )
-
-  const form = document.querySelector('#add-form')
-  form?.addEventListener('submit', (event) => {
+  app.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    const target = event.target.closest('[data-action="toggle-dose"]')
+    if (!target) return
     event.preventDefault()
-    const data = new FormData(form)
-    const name = String(data.get('name') || '').trim()
-    const dose = String(data.get('dose') || '').trim()
+    toggleTaken(target.dataset.med, target.dataset.time)
+  })
+
+  app.addEventListener('input', (event) => {
+    if (event.target.id === 'med-name') state.draftName = event.target.value
+    if (event.target.id === 'med-dose') state.draftDose = event.target.value
+  })
+
+  app.addEventListener('change', (event) => {
+    if (event.target.id === 'draft-hour') state.draftHour = event.target.value
+    if (event.target.id === 'draft-minute') state.draftMinute = event.target.value
+  })
+
+  app.addEventListener('submit', (event) => {
+    if (event.target.id !== 'add-form') return
+    event.preventDefault()
+    const name = state.draftName.trim()
+    const dose = state.draftDose.trim()
     if (!name) {
       showToast('Escribí el nombre')
       return
@@ -623,19 +649,23 @@ function bindEvents() {
     })
     saveMeds()
     resetDraft()
+    syncDraftInputs()
+    updateDaysUI()
+    updateTimesUI()
     closeSheet()
+    updateHome()
     showToast('Pastilla guardada')
   })
 }
 
 registerServiceWorker()
-render()
+mount()
 checkReminders()
 setInterval(() => checkReminders(), 30000)
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    render()
+    updateHome()
     checkReminders()
   }
 })
