@@ -262,12 +262,60 @@ button {
 }
 
 .undo-btn {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 0.85rem;
+  background: var(--ok);
+  color: #fff;
+  font-size: 1.15rem;
   font-weight: 700;
-  padding: 0 0.85rem;
-  min-width: auto;
+  width: 2.7rem;
+  padding: 0;
+}
+
+.med-days {
+  margin: 0.35rem 0 0 !important;
+  color: var(--brand) !important;
+  font-size: 0.82rem !important;
+  font-weight: 700;
+}
+
+.week-toggle {
+  width: 100%;
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--brand-deep);
+  font-weight: 700;
+  margin-bottom: 0.55rem;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.week-toggle.is-on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff8f2;
+}
+
+.days-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.day-chip {
+  min-height: 2.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.35rem 0.15rem;
+}
+
+.day-chip.is-on {
+  background: rgba(10, 107, 107, 0.12);
+  border-color: rgba(10, 107, 107, 0.35);
+  color: var(--brand-deep);
 }
 
 .empty {

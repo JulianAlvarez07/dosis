@@ -5,6 +5,8 @@ const LOG_KEY = 'dosis.log.v1'
 const NOTIFIED_KEY = 'dosis.notified.v1'
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
 const MONTHS = [
   'enero',
   'febrero',
@@ -24,6 +26,7 @@ const state = {
   meds: loadMeds(),
   log: loadLog(),
   draftTimes: [],
+  draftDays: [],
   draftName: '',
   draftDose: '',
   draftHour: '',
@@ -114,12 +117,31 @@ function markTaken(medId, time, taken = true) {
   else delete state.log[day][doseKey(medId, time)]
   saveLog()
   render()
-  showToast(taken ? 'Listo, pastilla marcada' : 'Desmarcado')
+}
+
+function medDays(med) {
+  if (Array.isArray(med.days) && med.days.length) return med.days
+  return ALL_DAYS
+}
+
+function isActiveToday(med, date = new Date()) {
+  return medDays(med).includes(date.getDay())
+}
+
+function isWholeWeek(days) {
+  return ALL_DAYS.every((day) => days.includes(day))
+}
+
+function daysLabel(days) {
+  const sorted = [...days].sort((a, b) => a - b)
+  if (isWholeWeek(sorted)) return 'Toda la semana'
+  return sorted.map((day) => DAY_SHORT[day]).join(' · ')
 }
 
 function todaysDoses() {
   const items = []
   for (const med of state.meds) {
+    if (!isActiveToday(med)) continue
     for (const time of med.times) {
       items.push({
         id: doseKey(med.id, time),
@@ -157,6 +179,7 @@ function openSheet(name) {
 
 function resetDraft() {
   state.draftTimes = []
+  state.draftDays = []
   state.draftName = ''
   state.draftDose = ''
   state.draftHour = ''
@@ -298,7 +321,7 @@ function renderDoseList() {
               </div>
               ${
                 dose.taken
-                  ? `<button class="undo-btn" data-action="undo" data-med="${dose.medId}" data-time="${dose.time}" aria-label="Deshacer">Hecho</button>`
+                  ? `<button class="undo-btn" data-action="undo" data-med="${dose.medId}" data-time="${dose.time}" aria-label="Deshacer">✓</button>`
                   : `<button class="take-btn" data-action="take" data-med="${dose.medId}" data-time="${dose.time}" aria-label="Marcar tomada">✓</button>`
               }
             </article>
@@ -322,12 +345,44 @@ function renderMedsList() {
               <div>
                 <h3>${escapeHtml(med.name)}</h3>
                 <p>${med.dose ? escapeHtml(med.dose) + ' · ' : ''}${med.times.join(' · ')}</p>
+                <p class="med-days">${escapeHtml(daysLabel(medDays(med)))}</p>
               </div>
               <button class="delete-btn" data-action="delete-med" data-med="${med.id}">Borrar</button>
             </article>
           `,
         )
         .join('')}
+    </div>
+  `
+}
+
+function renderDaysPicker() {
+  const wholeWeek = isWholeWeek(state.draftDays)
+  return `
+    <div class="field">
+      <label>Días</label>
+      <button
+        type="button"
+        class="week-toggle ${wholeWeek ? 'is-on' : ''}"
+        data-action="toggle-whole-week"
+        aria-pressed="${wholeWeek}"
+      >
+        Toda la semana
+      </button>
+      <div class="days-row" role="group" aria-label="Días de la semana">
+        ${ALL_DAYS.map((day) => {
+          const on = state.draftDays.includes(day)
+          return `
+            <button
+              type="button"
+              class="day-chip ${on ? 'is-on' : ''}"
+              data-action="toggle-day"
+              data-day="${day}"
+              aria-pressed="${on}"
+            >${DAY_SHORT[day]}</button>
+          `
+        }).join('')}
+      </div>
     </div>
   `
 }
@@ -356,7 +411,7 @@ function renderAddSheet() {
     <aside class="sheet ${state.sheet === 'add' ? 'open' : ''}" aria-hidden="${state.sheet !== 'add'}">
       <div class="sheet-handle"></div>
       <h2>Nueva pastilla</h2>
-      <p>Nombre, dosis y horarios. Se guarda en este celular.</p>
+      <p>Nombre, días y horarios. Se guarda en este celular.</p>
       <form id="add-form">
         <div class="field">
           <label for="med-name">Nombre</label>
@@ -366,6 +421,7 @@ function renderAddSheet() {
           <label for="med-dose">Dosis (opcional)</label>
           <input id="med-dose" name="dose" maxlength="40" placeholder="Ej. 1 comprimido" autocomplete="off" value="${escapeHtml(state.draftDose)}" />
         </div>
+        ${renderDaysPicker()}
         <div class="field">
           <label>Horarios</label>
           ${timesMarkup}
@@ -520,6 +576,25 @@ function bindEvents() {
     }),
   )
 
+  app.querySelectorAll('[data-action="toggle-whole-week"]').forEach((el) =>
+    el.addEventListener('click', () => {
+      state.draftDays = isWholeWeek(state.draftDays) ? [] : [...ALL_DAYS]
+      openSheet('add')
+    }),
+  )
+
+  app.querySelectorAll('[data-action="toggle-day"]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const day = Number(el.dataset.day)
+      if (state.draftDays.includes(day)) {
+        state.draftDays = state.draftDays.filter((d) => d !== day)
+      } else {
+        state.draftDays = [...state.draftDays, day].sort((a, b) => a - b)
+      }
+      openSheet('add')
+    }),
+  )
+
   const form = document.querySelector('#add-form')
   form?.addEventListener('submit', (event) => {
     event.preventDefault()
@@ -528,6 +603,10 @@ function bindEvents() {
     const dose = String(data.get('dose') || '').trim()
     if (!name) {
       showToast('Escribí el nombre')
+      return
+    }
+    if (!state.draftDays.length) {
+      showToast('Elegí al menos un día')
       return
     }
     if (!state.draftTimes.length) {
@@ -539,6 +618,7 @@ function bindEvents() {
       name,
       dose,
       times: [...state.draftTimes],
+      days: [...state.draftDays],
       createdAt: Date.now(),
     })
     saveMeds()
