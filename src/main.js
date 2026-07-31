@@ -304,25 +304,6 @@ function updateHome() {
   if (list) list.innerHTML = doseListHtml()
 }
 
-function patchDoseCard(medId, time) {
-  const dose = todaysDoses().find((item) => item.medId === medId && item.time === time)
-  const current = app.querySelector(
-    `[data-action="toggle-dose"][data-med="${CSS.escape(medId)}"][data-time="${CSS.escape(time)}"]`,
-  )
-  if (!dose || !current) {
-    updateHome()
-    return
-  }
-  const pending = todaysDoses().filter((d) => !d.taken).length
-  const chip = app.querySelector('[data-ref="date-chip"]')
-  if (chip) chip.textContent = `${formatDateLabel()}${pending ? ` · ${pending} pendientes` : ' · al día'}`
-  const wrap = document.createElement('div')
-  wrap.innerHTML = doseCardHtml(dose)
-  const next = wrap.firstElementChild
-  next.style.animation = 'none'
-  current.replaceWith(next)
-}
-
 function updateDaysUI() {
   const wholeWeek = isWholeWeek(state.draftDays)
   const weekBtn = app.querySelector('[data-action="toggle-whole-week"]')
@@ -673,7 +654,9 @@ function bindGlobalEvents() {
     updateDaysUI()
     updateTimesUI()
     closeSheet()
+    // Al agregar una pastilla hay que refrescar Hoy y Mis pastillas
     updateHome()
+    updateManageList()
     showToast('Pastilla guardada')
   })
 }
