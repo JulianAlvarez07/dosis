@@ -370,15 +370,14 @@ function render() {
         <p class="brand">Dosis</p>
         <p class="tagline">Tu recordatorio diario de pastillas, simple y a mano.</p>
         <div class="date-chip">${formatDateLabel()}${pending ? ` · ${pending} pendientes` : ' · al día'}</div>
+        <div class="hero-actions">
+          <button class="ghost" type="button" data-action="open-manage">Mis pastillas</button>
+          <button class="primary" type="button" data-action="open-add">Agregar</button>
+        </div>
       </header>
 
       <h2 class="section-title">Hoy</h2>
       ${renderDoseList()}
-    </div>
-
-    <div class="dock">
-      <button class="ghost" data-action="open-manage">Mis pastillas</button>
-      <button class="primary" data-action="open-add">Agregar</button>
     </div>
 
     ${renderAddSheet()}

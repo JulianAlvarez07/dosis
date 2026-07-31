@@ -57,9 +57,8 @@ button {
   min-height: 100dvh;
   max-width: 480px;
   margin: 0 auto;
-  padding: 1.1rem 1.1rem calc(5.5rem + var(--safe-bottom));
+  padding: 1.1rem 1.1rem calc(1.4rem + var(--safe-bottom));
   position: relative;
-  overflow-x: hidden;
 }
 
 .atmosphere {
@@ -150,6 +149,14 @@ button {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 5px rgba(217, 107, 76, 0.18);
+}
+
+.hero-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+  animation: fade-in 0.7s ease 0.12s both;
 }
 
 .section-title {
@@ -281,16 +288,7 @@ button {
 }
 
 .dock {
-  position: fixed;
-  left: 50%;
-  bottom: calc(0.9rem + var(--safe-bottom));
-  transform: translateX(-50%);
-  width: min(440px, calc(100% - 1.6rem));
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.55rem;
-  z-index: 5;
-  animation: rise 0.7s ease 0.15s both;
+  display: none;
 }
 
 .primary,
@@ -299,6 +297,7 @@ button {
   padding: 0.95rem 1rem;
   font-weight: 700;
   font-size: 0.98rem;
+  min-height: 3rem;
 }
 
 .primary {
@@ -321,19 +320,23 @@ button {
   z-index: 20;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s ease;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
 .sheet-backdrop.open {
   opacity: 1;
   pointer-events: auto;
+  visibility: visible;
 }
 
 .sheet {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 0;
-  transform: translate(-50%, 110%);
+  margin: 0 auto;
+  transform: translateY(110%);
   width: min(480px, 100%);
   max-height: min(88dvh, 720px);
   overflow: auto;
@@ -343,10 +346,14 @@ button {
   z-index: 21;
   box-shadow: 0 -20px 50px rgba(8, 40, 38, 0.2);
   transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .sheet.open {
-  transform: translate(-50%, 0);
+  transform: translateY(0);
+  pointer-events: auto;
+  visibility: visible;
 }
 
 .sheet-handle {
@@ -479,9 +486,12 @@ button {
 
 .toast {
   position: fixed;
-  left: 50%;
-  bottom: calc(5.2rem + var(--safe-bottom));
-  transform: translateX(-50%) translateY(20px);
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(1.2rem + var(--safe-bottom));
+  margin: 0 auto;
+  max-width: min(360px, calc(100% - 2rem));
+  transform: translateY(20px);
   background: var(--ink);
   color: #fff8f2;
   padding: 0.75rem 1rem;
@@ -492,13 +502,12 @@ button {
   pointer-events: none;
   z-index: 30;
   transition: opacity 0.25s ease, transform 0.25s ease;
-  max-width: min(90vw, 360px);
   text-align: center;
 }
 
 .toast.show {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 @keyframes rise {
@@ -509,6 +518,15 @@ button {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
