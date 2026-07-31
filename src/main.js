@@ -23,9 +23,11 @@ const MONTHS = [
 const state = {
   meds: loadMeds(),
   log: loadLog(),
-  draftTimes: ['08:00'],
+  draftTimes: [],
   draftName: '',
   draftDose: '',
+  draftHour: '',
+  draftMinute: '',
   sheet: null,
   toastTimer: null,
 }
@@ -150,14 +152,46 @@ function showToast(message) {
 
 function openSheet(name) {
   state.sheet = name
-  if (name === 'add' && !state.draftTimes.length) state.draftTimes = ['08:00']
   render()
 }
 
 function resetDraft() {
-  state.draftTimes = ['08:00']
+  state.draftTimes = []
   state.draftName = ''
   state.draftDose = ''
+  state.draftHour = ''
+  state.draftMinute = ''
+}
+
+function formatHourLabel(hour) {
+  return String(hour)
+}
+
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function buildTimeValue(hour, minute) {
+  if (hour === '' || minute === '') return null
+  const h = Number(hour)
+  const m = Number(minute)
+  if (!Number.isInteger(h) || h < 0 || h > 23) return null
+  if (!Number.isInteger(m) || m < 0 || m > 59) return null
+  return `${pad2(h)}:${pad2(m)}`
+}
+
+function hourOptions() {
+  return Array.from({ length: 24 }, (_, hour) => {
+    const selected = String(state.draftHour) === String(hour) ? 'selected' : ''
+    return `<option value="${hour}" ${selected}>${formatHourLabel(hour)}</option>`
+  }).join('')
+}
+
+function minuteOptions() {
+  return Array.from({ length: 60 }, (_, minute) => {
+    const selected = String(state.draftMinute) === String(minute) ? 'selected' : ''
+    return `<option value="${minute}" ${selected}>${pad2(minute)}</option>`
+  }).join('')
 }
 
 function closeSheet() {
@@ -299,6 +333,24 @@ function renderMedsList() {
 }
 
 function renderAddSheet() {
+  const timesMarkup = state.draftTimes.length
+    ? `
+      <div class="times-row" id="times-row">
+        ${state.draftTimes
+          .map(
+            (time, index) => `
+              <span class="time-pill">
+                <strong>${escapeHtml(time)}</strong>
+                <span>${periodLabel(time)}</span>
+                <button type="button" data-action="remove-time" data-index="${index}" aria-label="Quitar horario">×</button>
+              </span>
+            `,
+          )
+          .join('')}
+      </div>
+    `
+    : `<p class="times-empty">Todavía no agregaste un horario.</p>`
+
   return `
     <div class="sheet-backdrop ${state.sheet === 'add' ? 'open' : ''}" data-action="close-sheet"></div>
     <aside class="sheet ${state.sheet === 'add' ? 'open' : ''}" aria-hidden="${state.sheet !== 'add'}">
@@ -316,25 +368,28 @@ function renderAddSheet() {
         </div>
         <div class="field">
           <label>Horarios</label>
-          <div class="times-row" id="times-row">
-            ${state.draftTimes
-              .map(
-                (time, index) => `
-                  <span class="time-pill">
-                    ${escapeHtml(time)}
-                    <button type="button" data-action="remove-time" data-index="${index}" aria-label="Quitar horario">×</button>
-                  </span>
-                `,
-              )
-              .join('')}
-          </div>
+          ${timesMarkup}
         </div>
         <div class="field">
-          <label for="new-time">Agregar horario</label>
-          <div class="add-time">
-            <input id="new-time" type="time" value="20:00" />
-            <button type="button" data-action="add-time">Sumar</button>
+          <label>Elegí un horario (0 a 23 h)</label>
+          <div class="time-picker" role="group" aria-label="Selector de horario">
+            <label class="time-picker-part">
+              <span>Hora</span>
+              <select id="draft-hour" aria-label="Hora">
+                <option value="" ${state.draftHour === '' ? 'selected' : ''} disabled>Elegir</option>
+                ${hourOptions()}
+              </select>
+            </label>
+            <span class="time-picker-sep" aria-hidden="true">:</span>
+            <label class="time-picker-part">
+              <span>Minutos</span>
+              <select id="draft-minute" aria-label="Minutos">
+                <option value="" ${state.draftMinute === '' ? 'selected' : ''} disabled>Elegir</option>
+                ${minuteOptions()}
+              </select>
+            </label>
           </div>
+          <button type="button" class="add-time-btn" data-action="add-time">Agregar horario</button>
         </div>
         <div class="sheet-actions">
           <button type="button" class="ghost" data-action="close-sheet">Cancelar</button>
@@ -422,23 +477,38 @@ function bindEvents() {
 
   const nameInput = document.querySelector('#med-name')
   const doseInput = document.querySelector('#med-dose')
+  const hourSelect = document.querySelector('#draft-hour')
+  const minuteSelect = document.querySelector('#draft-minute')
   nameInput?.addEventListener('input', () => {
     state.draftName = nameInput.value
   })
   doseInput?.addEventListener('input', () => {
     state.draftDose = doseInput.value
   })
+  hourSelect?.addEventListener('change', () => {
+    state.draftHour = hourSelect.value
+  })
+  minuteSelect?.addEventListener('change', () => {
+    state.draftMinute = minuteSelect.value
+  })
 
   app.querySelectorAll('[data-action="add-time"]').forEach((el) =>
     el.addEventListener('click', () => {
-      const input = document.querySelector('#new-time')
-      const value = input?.value
-      if (!value) return
-      if (!state.draftTimes.includes(value)) {
-        state.draftTimes.push(value)
-        state.draftTimes.sort((a, b) => parseTime(a) - parseTime(b))
+      const value = buildTimeValue(state.draftHour, state.draftMinute)
+      if (!value) {
+        showToast('Elegí hora y minutos')
+        return
       }
+      if (state.draftTimes.includes(value)) {
+        showToast('Ese horario ya está')
+        return
+      }
+      state.draftTimes.push(value)
+      state.draftTimes.sort((a, b) => parseTime(a) - parseTime(b))
+      state.draftHour = ''
+      state.draftMinute = ''
       openSheet('add')
+      showToast(`Horario ${value} agregado`)
     }),
   )
 
@@ -446,7 +516,6 @@ function bindEvents() {
     el.addEventListener('click', () => {
       const index = Number(el.dataset.index)
       state.draftTimes = state.draftTimes.filter((_, i) => i !== index)
-      if (!state.draftTimes.length) state.draftTimes = ['08:00']
       openSheet('add')
     }),
   )
@@ -457,7 +526,14 @@ function bindEvents() {
     const data = new FormData(form)
     const name = String(data.get('name') || '').trim()
     const dose = String(data.get('dose') || '').trim()
-    if (!name || !state.draftTimes.length) return
+    if (!name) {
+      showToast('Escribí el nombre')
+      return
+    }
+    if (!state.draftTimes.length) {
+      showToast('Agregá al menos un horario')
+      return
+    }
     state.meds.push({
       id: uid(),
       name,
