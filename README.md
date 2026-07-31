@@ -2,6 +2,8 @@
 
 Aplicación web móvil para recordarte cuándo tomarte las pastillas.
 
+**App en vivo:** https://julianalvarez07.github.io/dosis/
+
 ## Qué hace
 
 - Agregás pastillas con nombre, dosis y horarios
@@ -12,7 +14,7 @@ Aplicación web móvil para recordarte cuándo tomarte las pastillas.
 
 ## Cómo usarla en el celular
 
-1. Abrí el sitio en Chrome (Android) o Safari (iPhone)
+1. Abrí https://julianalvarez07.github.io/dosis/ en Chrome (Android) o Safari (iPhone)
 2. En Android: menú → **Instalar app** / **Agregar a la pantalla de inicio**
 3. En iPhone: Compartir → **Agregar a pantalla de inicio**
 4. Tocá **Mis pastillas → Activar avisos** para recibir recordatorios
