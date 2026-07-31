@@ -201,7 +201,8 @@ function toggleTaken(medId, time) {
   if (state.log[day][key]) delete state.log[day][key]
   else state.log[day][key] = Date.now()
   saveLog()
-  patchDoseCard(medId, time)
+  // El estado de la pastilla debe refrescar la lista de hoy
+  updateHome()
 }
 
 function hourOptionsHtml() {
@@ -301,6 +302,25 @@ function updateHome() {
   const list = app.querySelector('[data-ref="dose-list"]')
   if (chip) chip.textContent = `${formatDateLabel()}${pending ? ` · ${pending} pendientes` : ' · al día'}`
   if (list) list.innerHTML = doseListHtml()
+}
+
+function patchDoseCard(medId, time) {
+  const dose = todaysDoses().find((item) => item.medId === medId && item.time === time)
+  const current = app.querySelector(
+    `[data-action="toggle-dose"][data-med="${CSS.escape(medId)}"][data-time="${CSS.escape(time)}"]`,
+  )
+  if (!dose || !current) {
+    updateHome()
+    return
+  }
+  const pending = todaysDoses().filter((d) => !d.taken).length
+  const chip = app.querySelector('[data-ref="date-chip"]')
+  if (chip) chip.textContent = `${formatDateLabel()}${pending ? ` · ${pending} pendientes` : ' · al día'}`
+  const wrap = document.createElement('div')
+  wrap.innerHTML = doseCardHtml(dose)
+  const next = wrap.firstElementChild
+  next.style.animation = 'none'
+  current.replaceWith(next)
 }
 
 function updateDaysUI() {
